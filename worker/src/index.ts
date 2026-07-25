@@ -1,5 +1,5 @@
-// ============================================================================
-// DERIV BOT — CONTROL LAYER (Cloudflare Worker)
+﻿// ============================================================================
+// DERIV BOT â€” CONTROL LAYER (Cloudflare Worker)
 //
 // Responsibilities:
 //   1. Telegram bot - remote control (pause/resume, mode switch, status, report)
@@ -311,6 +311,16 @@ async function handleLogTrade(req: Request, env: Env): Promise<Response> {
     state.dailyLoss += Math.abs(body.pnl);
   }
   await setState(env, state);
+
+  // Per-trade Telegram notification -- fires identically in demo and real mode
+  const modeTag = state.mode === 'real' ? '[REAL]' : '[demo]';
+  const resultTag = body.result === 'WIN' ? 'WIN' : 'LOSS';
+  await sendTelegram(env,
+    `${resultTag} ${modeTag}\n` +
+    `${body.symbol} ${body.direction}\n` +
+    `P&L: ${body.pnl.toFixed(2)}\n` +
+    `Daily loss: ${state.dailyLoss.toFixed(2)}${state.dailyLossLimit > 0 ? ' / ' + state.dailyLossLimit.toFixed(2) : ''}`
+  );
 
   if (state.dailyLossLimit > 0 && state.dailyLoss >= state.dailyLossLimit && !state.paused) {
     state.paused = true;
