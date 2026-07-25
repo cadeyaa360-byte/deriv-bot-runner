@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Transfer Status Request",
+  "description": "Request the current status of a transfer previously initiated with a request_id",
+  "type": "object",
+  "properties": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "Deriv-App-ID": {
+          "type": "string",
+          "description": "Application identifier"
+        },
+        "Authorization": {
+          "type": "string",
+          "description": "Bearer token for authentication",
+          "example": "Bearer YOUR_AUTH_TOKEN"
+        }
+      },
+      "required": ["Deriv-App-ID", "Authorization"]
+    },
+    "path": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "pattern": "^[\\w\\-]{1,128}$",
+          "description": "The `request_id` previously passed to the transfer endpoint (1-128 characters: letters, digits, underscore, hyphen). A malformed value returns `InvalidRequestIDFormat`; a well-formed value that matches none of your transfers returns `RequestIDNotFound`.",
+          "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        }
+      },
+      "required": ["request_id"]
+    }
+  },
+  "required": ["headers", "path"]
+}

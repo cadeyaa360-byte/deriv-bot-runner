@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Account Nickname (request)",
+  "description": "Request for the GET /account/v1/nickname endpoint. The endpoint takes no query parameters or body. The caller's brand and identity are resolved by the gateway from the X-Brand and X-Client-ID request headers and cannot be spoofed by the client.",
+  "type": "object",
+  "required": ["Deriv-App-ID"],
+  "properties": {
+    "Deriv-App-ID": {
+      "type": "string",
+      "description": "Application identifier used for authentication. Passed as a request header.",
+      "example": "YOUR_APP_ID"
+    }
+  },
+  "additionalProperties": false
+}

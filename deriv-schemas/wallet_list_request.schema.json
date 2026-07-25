@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "List Wallets Request",
+  "description": "Request to list the wallets belonging to the authenticated client, with balances in each wallet's native currency and an optional currency conversion.",
+  "type": "object",
+  "properties": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "Deriv-App-ID": {
+          "type": "string",
+          "description": "Application identifier"
+        },
+        "Authorization": {
+          "type": "string",
+          "description": "Bearer token for authentication",
+          "example": "Bearer YOUR_AUTH_TOKEN"
+        }
+      },
+      "required": ["Deriv-App-ID", "Authorization"]
+    },
+    "query": {
+      "type": "object",
+      "properties": {
+        "conversion_currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "3-letter ISO currency code. When supplied, balance amounts are additionally returned converted to this currency.",
+          "example": "USD"
+        },
+        "start_date_time": {
+          "type": ["string", "integer"],
+          "description": "ISO 8601 timestamp or epoch seconds. Lower bound of the `balance as of` window."
+        },
+        "end_date_time": {
+          "type": ["string", "integer"],
+          "description": "ISO 8601 timestamp or epoch seconds. Upper bound of the `balance as of` window."
+        }
+      }
+    }
+  },
+  "required": ["headers"]
+}

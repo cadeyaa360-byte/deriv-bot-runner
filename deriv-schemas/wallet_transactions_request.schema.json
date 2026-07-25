@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Wallet Transactions Request",
+  "description": "Request a cursor-paginated list of transactions for one of the authenticated client's wallets, identified by wallet_type.",
+  "type": "object",
+  "properties": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "Deriv-App-ID": {
+          "type": "string",
+          "description": "Application identifier"
+        },
+        "Authorization": {
+          "type": "string",
+          "description": "Bearer token for authentication",
+          "example": "Bearer YOUR_AUTH_TOKEN"
+        }
+      },
+      "required": ["Deriv-App-ID", "Authorization"]
+    },
+    "path": {
+      "type": "object",
+      "properties": {
+        "wallet_type": {
+          "type": "string",
+          "enum": ["main", "p2p", "partner", "payment_agent"],
+          "description": "Wallet type to return transactions for. Resolved server-side against the caller's client identity.",
+          "example": "main"
+        }
+      },
+      "required": ["wallet_type"]
+    },
+    "query": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "description": "Filter by the transaction's `request_id`."
+        },
+        "transaction_currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "3-letter ISO currency code. Restricts the response to transactions in this currency.",
+          "example": "USD"
+        },
+        "start_date_time": {
+          "type": ["string", "integer"],
+          "description": "ISO 8601 timestamp or epoch seconds. Lower bound of the transaction window."
+        },
+        "end_date_time": {
+          "type": ["string", "integer"],
+          "description": "ISO 8601 timestamp or epoch seconds. Upper bound of the transaction window."
+        },
+        "per_page": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 1000,
+          "default": 100,
+          "description": "Page size. Between 100 and 1000. Defaults to 100."
+        },
+        "page_cursor": {
+          "type": "string",
+          "description": "Opaque cursor returned in `links.next` / `links.prev`. When present, other filters are ignored — the cursor encodes them."
+        }
+      }
+    }
+  },
+  "required": ["headers", "path"]
+}

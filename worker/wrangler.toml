@@ -1,0 +1,30 @@
+﻿name = "deriv-bot-control"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+# Watchdog: checks every minute whether GitHub Actions has gone silent
+[triggers]
+crons = ["* * * * *"]
+
+# KV namespace for live state (mode, paused, daily loss, heartbeat)
+# Create with: wrangler kv:namespace create STATE_KV
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "STATE_KV"
+id = "849d813001d1466481f3642b5e12a7c4"
+
+# D1 database for trade history
+# Create with: wrangler d1 create deriv-bot-db
+# then paste the returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "deriv-bot-db"
+database_id = "94148b0d-f87e-4e22-907d-cd31ab49d01b"
+
+# Secrets â€” do NOT put real values here. Set them with:
+#   wrangler secret put TELEGRAM_BOT_TOKEN
+#   wrangler secret put TELEGRAM_CHAT_ID
+#   wrangler secret put CONFIRM_PHRASE
+#   wrangler secret put API_SHARED_SECRET
+
+

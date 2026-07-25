@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Update Client Settings Response",
+  "description": "The client's updated settings for using payment agents.",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "object",
+      "description": "The client's updated settings for using payment agents.",
+      "properties": {
+        "deposit_enabled": {
+          "type": "boolean",
+          "description": "Whether the client can currently receive deposits from payment agents (that is, be the recipient of a transfer).",
+          "example": true
+        },
+        "withdraw_enabled": {
+          "type": "boolean",
+          "description": "Whether the client can currently withdraw funds through a payment agent.",
+          "example": true
+        },
+        "show_real_name": {
+          "type": "boolean",
+          "description": "Whether payment agents see the client's real name on transactions. `false` withholds the real name.",
+          "example": true
+        }
+      },
+      "required": ["deposit_enabled", "withdraw_enabled", "show_real_name"]
+    },
+    "errors": {
+      "type": "array",
+      "description": "Empty on success.",
+      "items": {}
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Request metadata included in every response.",
+      "properties": {
+        "endpoint": { "type": "string", "description": "The request URI." },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "description": "The HTTP method used for the request."
+        },
+        "timing": {
+          "type": "number",
+          "description": "Time in seconds for the service to process the request."
+        }
+      },
+      "required": ["endpoint", "method", "timing"]
+    }
+  },
+  "required": ["data", "errors", "metadata"]
+}

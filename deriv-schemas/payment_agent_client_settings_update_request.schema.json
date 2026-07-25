@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Update Client Settings Request",
+  "description": "Update the authenticated client's payment agent privacy preference",
+  "type": "object",
+  "properties": {
+    "headers": {
+      "type": "object",
+      "properties": {
+        "Deriv-App-ID": {
+          "type": "string",
+          "description": "Application identifier"
+        },
+        "Authorization": {
+          "type": "string",
+          "description": "Bearer token for authentication",
+          "example": "Bearer YOUR_AUTH_TOKEN"
+        },
+        "Content-Type": {
+          "type": "string",
+          "enum": ["application/json"],
+          "description": "Content type"
+        }
+      },
+      "required": ["Deriv-App-ID", "Authorization", "Content-Type"]
+    },
+    "body": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "Settings to update.",
+          "properties": {
+            "show_real_name": {
+              "type": "boolean",
+              "description": "New value for the privacy preference. `true` reveals the client's real name to payment agents on future transactions; `false` withholds it.",
+              "example": true
+            }
+          },
+          "required": ["show_real_name"]
+        }
+      },
+      "required": ["data"]
+    }
+  },
+  "required": ["headers", "body"]
+}

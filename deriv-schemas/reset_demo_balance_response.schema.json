@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Reset Demo Balance Response",
+  "description": "HTTP 200 with no response body. The status code alone confirms the demo account's balance was reset to its default starting amount.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

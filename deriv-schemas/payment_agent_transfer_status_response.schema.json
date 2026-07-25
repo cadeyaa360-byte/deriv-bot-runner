@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Transfer Status Response",
+  "description": "Current status of the requested transfer.",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["requested", "pending", "complete", "rejected", "failed"],
+          "description": "Current status of the transfer. Most transfers are `complete` immediately; a `pending` transfer progresses to `complete`, `rejected`, or `failed`. `requested` is a transient state callers are unlikely to see.",
+          "example": "complete"
+        },
+        "transaction_id": {
+          "type": ["integer", "null"],
+          "description": "Identifier of the transaction. May be null while the transfer is still being processed or if it did not complete successfully.",
+          "example": 123
+        }
+      },
+      "required": ["status", "transaction_id"]
+    },
+    "errors": {
+      "type": "array",
+      "description": "Empty on success.",
+      "items": {}
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Request metadata included in every response.",
+      "properties": {
+        "endpoint": { "type": "string", "description": "The request URI." },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "description": "The HTTP method used for the request."
+        },
+        "timing": {
+          "type": "number",
+          "description": "Time in seconds for the service to process the request."
+        }
+      },
+      "required": ["endpoint", "method", "timing"]
+    }
+  },
+  "required": ["data", "errors", "metadata"]
+}

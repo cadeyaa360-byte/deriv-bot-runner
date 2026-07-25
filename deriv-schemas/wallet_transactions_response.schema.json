@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Wallet Transactions Response",
+  "description": "Successful transactions response for the requested wallet type.",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "object",
+      "description": "Envelope for the transactions list plus the resolved date range for the current page.",
+      "properties": {
+        "start_date_time": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Lower bound of the returned range. `null` when unbounded."
+        },
+        "end_date_time": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Upper bound of the returned range. `null` when unbounded."
+        },
+        "transactions": {
+          "type": "array",
+          "description": "Transactions on this page, newest first.",
+          "items": {
+            "type": "object",
+            "description": "A single wallet transaction. `category` is computed relative to the caller (deposit / withdrawal), and `channel` indicates how the money moved (cashier / payment agent).",
+            "properties": {
+              "request_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Idempotency / correlation ID.",
+                "example": "ef4b3abd-c05e-42ea-a3f2-021ec69e1580"
+              },
+              "transaction_id": {
+                "type": "integer",
+                "description": "Wallet-service assigned identifier.",
+                "example": 277121
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO 8601 UTC timestamp with microseconds.",
+                "example": "2026-07-10T07:34:29.688372Z"
+              },
+              "category": {
+                "type": "string",
+                "enum": ["deposit", "withdrawal"],
+                "description": "Direction of the transaction relative to the caller."
+              },
+              "channel": {
+                "type": "string",
+                "enum": ["cashier", "payment_agent"],
+                "description": "How the money moved."
+              },
+              "metadata": {
+                "type": "object",
+                "description": "Transaction metadata. `source_*` and `destination_*` fields are populated per the channel/category matrix. Any metadata field whose value would reference internal cashier plumbing is dropped from the response entirely (the field is absent rather than empty).",
+                "properties": {
+                  "transaction_status": {
+                    "type": "string",
+                    "description": "Transaction settlement status.",
+                    "example": "complete"
+                  },
+                  "transaction_gross_amount": {
+                    "type": "string",
+                    "description": "Gross amount as a decimal string.",
+                    "example": "10"
+                  },
+                  "transaction_net_amount": {
+                    "type": "string",
+                    "description": "Net amount as a decimal string.",
+                    "example": "10"
+                  },
+                  "transaction_currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$",
+                    "description": "3-letter ISO currency code the amounts are denominated in.",
+                    "example": "USD"
+                  },
+                  "source_client_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Owning client of the source wallet. Absent for cashier deposits (the source is the system)."
+                  },
+                  "source_wallet_type": {
+                    "type": "string",
+                    "enum": ["main", "p2p", "partner", "payment_agent"],
+                    "description": "Wallet type on the source side. Absent for cashier deposits."
+                  },
+                  "destination_client_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Owning client of the destination wallet. Absent for cashier withdrawals."
+                  },
+                  "destination_wallet_type": {
+                    "type": "string",
+                    "enum": ["main", "p2p", "partner", "payment_agent"],
+                    "description": "Wallet type on the destination side. Absent for cashier withdrawals."
+                  }
+                },
+                "required": [
+                  "transaction_status",
+                  "transaction_gross_amount",
+                  "transaction_net_amount",
+                  "transaction_currency"
+                ]
+              }
+            },
+            "required": [
+              "request_id",
+              "transaction_id",
+              "timestamp",
+              "category",
+              "channel",
+              "metadata"
+            ]
+          }
+        }
+      },
+      "required": ["start_date_time", "end_date_time", "transactions"]
+    },
+    "links": {
+      "type": "object",
+      "description": "Cursor-based pagination links. Each link contains only `page_cursor` — follow it verbatim to fetch the next / previous page. `null` when the corresponding page does not exist (e.g. `next` on the last page).",
+      "properties": {
+        "self": {
+          "type": ["string", "null"],
+          "description": "URL of the current page.",
+          "example": "/wallet/v1/transactions/main?page_cursor=…"
+        },
+        "next": {
+          "type": ["string", "null"],
+          "description": "URL of the next page, or `null` when there is no next page."
+        },
+        "prev": {
+          "type": ["string", "null"],
+          "description": "URL of the previous page, or `null` when there is no previous page."
+        },
+        "first": {
+          "type": ["string", "null"],
+          "description": "URL of the first page."
+        }
+      },
+      "required": ["self", "next", "prev", "first"]
+    }
+  },
+  "required": ["data", "links"]
+}

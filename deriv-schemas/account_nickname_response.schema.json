@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Account Nickname (response)",
+  "description": "Response from GET /account/v1/nickname.",
+  "type": "object",
+  "required": ["data", "errors", "metadata"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "description": "Nickname data for the authenticated user's identity.",
+      "required": ["external_reference_id", "nickname"],
+      "properties": {
+        "external_reference_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The external reference ID for this identity."
+        },
+        "nickname": {
+          "type": "string",
+          "description": "The nickname associated with this identity."
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "description": "Empty on success.",
+      "items": {}
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Request metadata included in every response.",
+      "required": ["endpoint", "method", "timing"],
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "description": "The request URI."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "description": "The HTTP method used for the request."
+        },
+        "timing": {
+          "type": "number",
+          "description": "Time in seconds for the service to process the request."
+        }
+      }
+    }
+  }
+}

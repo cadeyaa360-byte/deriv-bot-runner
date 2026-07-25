@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "List Wallets Response",
+  "description": "Successful wallet list response for the authenticated client.",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "array",
+      "description": "One entry per wallet owned by the authenticated client.",
+      "items": {
+        "type": "object",
+        "description": "A single wallet belonging to the authenticated client.",
+        "properties": {
+          "wallet_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Wallet identifier.",
+            "example": "942a2f2d-1f33-4559-994e-42b403033bc6"
+          },
+          "type": {
+            "type": "string",
+            "description": "Wallet type.",
+            "example": "main"
+          },
+          "balances": {
+            "type": "object",
+            "description": "Balances keyed by 3-letter ISO currency code.",
+            "additionalProperties": {
+              "type": "object",
+              "description": "Balance figures for a single currency within a wallet. All amounts are decimal strings to preserve precision.",
+              "properties": {
+                "balance": {
+                  "type": "string",
+                  "description": "Current balance in this currency.",
+                  "example": "1993.2"
+                },
+                "input": {
+                  "type": "string",
+                  "description": "Cumulative amount credited to the wallet in this currency.",
+                  "example": "2283.2"
+                },
+                "output": {
+                  "type": "string",
+                  "description": "Cumulative amount debited from the wallet in this currency.",
+                  "example": "290"
+                }
+              },
+              "required": ["balance", "input", "output"]
+            }
+          },
+          "total_balance": {
+            "type": "object",
+            "description": "Only present when `conversion_currency` is set on the request. Shows the wallet's balances summed and converted into the requested currency. Amounts are approximate because FX rates fluctuate.",
+            "properties": {
+              "converted_to": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$",
+                "description": "Currency the totals were converted into — echoes the request's `conversion_currency`.",
+                "example": "USD"
+              },
+              "approximate_total_balance": {
+                "type": "string",
+                "description": "Sum of all currency balances converted into `converted_to`.",
+                "example": "345.57598013272"
+              },
+              "approximate_total_input": {
+                "type": "string",
+                "description": "Sum of all currency inputs converted into `converted_to`.",
+                "example": "382.57598013272"
+              },
+              "approximate_total_output": {
+                "type": "string",
+                "description": "Sum of all currency outputs converted into `converted_to`.",
+                "example": "37"
+              }
+            },
+            "required": [
+              "converted_to",
+              "approximate_total_balance",
+              "approximate_total_input",
+              "approximate_total_output"
+            ]
+          }
+        },
+        "required": ["wallet_id", "type", "balances"]
+      }
+    }
+  },
+  "required": ["data"]
+}

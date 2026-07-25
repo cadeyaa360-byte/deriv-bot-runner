@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Transfer (Deposit) Response",
+  "description": "Result of the transfer. A real transfer returns `status` `complete`; a `dry_run` returns `dry_run_ok`.",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "object",
+      "description": "Result of the transfer call.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["complete", "pending", "dry_run_ok"],
+          "description": "`complete` when a real transfer was executed. `pending` when the transfer was accepted but is still being processed — use `GET /payment-agents/v1/transfer/{request_id}` with the supplied `request_id` to poll for the final status. `dry_run_ok` when `dry_run` was `true` and only validation was performed.",
+          "example": "complete"
+        },
+        "transaction_id": {
+          "type": ["integer", "null"],
+          "description": "Identifier of the created transaction. `null` when `status` is `dry_run_ok` or `pending`.",
+          "example": 123
+        },
+        "client_real_name": {
+          "type": ["string", "null"],
+          "description": "Recipient's real name. Returned when the recipient shares it by setting `show_real_name` to `true`. `null` if they keep it private or it cannot be resolved.",
+          "example": "Jane Doe"
+        },
+        "client_is_agent": {
+          "type": "boolean",
+          "description": "Whether the recipient is itself another payment agent. `true` for transfers between two payment agents, `false` for a transfer to a regular client.",
+          "example": false
+        }
+      },
+      "required": ["status", "transaction_id", "client_real_name", "client_is_agent"]
+    },
+    "errors": {
+      "type": "array",
+      "items": {},
+      "description": "Empty on success."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Request metadata included in every response.",
+      "properties": {
+        "endpoint": { "type": "string", "description": "The request URI." },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "description": "The HTTP method used for the request."
+        },
+        "timing": {
+          "type": "number",
+          "description": "Time in seconds for the service to process the request."
+        }
+      },
+      "required": ["endpoint", "method", "timing"]
+    }
+  },
+  "required": ["data", "errors", "metadata"]
+}
