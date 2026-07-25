@@ -17,3 +17,5 @@ jobs:
           DERIV_TOKEN: ${{ secrets.DERIV_TOKEN }}
           WORKER_URL: ${{ secrets.WORKER_URL }}
           API_SHARED_SECRET: ${{ secrets.API_SHARED_SECRET }}
+
+
