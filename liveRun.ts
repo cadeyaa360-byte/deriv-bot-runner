@@ -1,5 +1,5 @@
-// ============================================================================
-// LIVE RUN — one-shot script for GitHub Actions
+﻿// ============================================================================
+// LIVE RUN â€” one-shot script for GitHub Actions
 //
 // Unlike forwardTestExec.ts (persistent, runs until Ctrl+C), this connects,
 // checks the Worker for permission to trade, looks at the latest closed
@@ -68,10 +68,11 @@ async function getWorkerState(): Promise<WorkerState> {
   return res.json();
 }
 
-async function sendHeartbeat(): Promise<void> {
+async function sendHeartbeat(balance?: number): Promise<void> {
   await fetch(`${WORKER_URL}/heartbeat`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${API_SHARED_SECRET}` },
+    headers: { Authorization: `Bearer ${API_SHARED_SECRET}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(typeof balance === 'number' ? { balance } : {}),
   });
 }
 
@@ -98,7 +99,7 @@ async function logTrade(trade: TradeLog): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// EXACT proven strategy logic — unchanged
+// EXACT proven strategy logic â€” unchanged
 // ---------------------------------------------------------------------------
 
 function cmoTriggers(candles: Candle[]): Trigger[] {
@@ -212,6 +213,17 @@ class DerivSocket {
   close() { this.ws.close(); }
 }
 
+async function fetchBalance(sock: DerivSocket): Promise<number | undefined> {
+  try {
+    const res = await sock.send({ balance: 1 });
+    const bal = Number(res?.balance?.balance);
+    return isNaN(bal) ? undefined : bal;
+  } catch (err) {
+    console.warn(`[balance fetch failed] ${(err as Error).message}`);
+    return undefined;
+  }
+}
+
 async function fetchRecentCandles(sock: DerivSocket, symbol: string): Promise<Candle[]> {
   const msg = await sock.send({ ticks_history: symbol, style: 'candles', granularity: GRANULARITY_SEC, count: WARMUP_CANDLES, end: 'latest' });
   const hist = (msg.candles || []) as any[];
@@ -256,7 +268,7 @@ async function pollForSettlement(sock: DerivSocket, contractId: string): Promise
 }
 
 // ---------------------------------------------------------------------------
-// Main — one-shot run
+// Main â€” one-shot run
 // ---------------------------------------------------------------------------
 
 async function main() {
@@ -354,7 +366,13 @@ async function main() {
     }
   }
 
-  await sendHeartbeat();
+  const finalBalanceSock = new DerivSocket(url);
+  await finalBalanceSock.waitReady();
+  const balance = await fetchBalance(finalBalanceSock);
+  finalBalanceSock.close();
+  if (balance !== undefined) console.log(`Current balance: ${balance.toFixed(2)}`);
+
+  await sendHeartbeat(balance);
   console.log(`[${new Date().toISOString()}] liveRun complete. ${settledTrades.length} trade(s) settled and logged.`);
 }
 

@@ -40,8 +40,11 @@ interface BotState {
   pendingRealConfirm: boolean;
   dailyLossLimit: number;
   dailyLoss: number;
+  dailyWins: number;
+  dailyWinPnl: number;
   dailyLossDate: string;
   lastHeartbeat: number;
+  balance: number;
 }
 
 const DEFAULT_STATE: BotState = {
@@ -50,8 +53,11 @@ const DEFAULT_STATE: BotState = {
   pendingRealConfirm: false,
   dailyLossLimit: 0,
   dailyLoss: 0,
+  dailyWins: 0,
+  dailyWinPnl: 0,
   dailyLossDate: todayStr(),
   lastHeartbeat: 0,
+  balance: 0,
 };
 
 function todayStr(): string {
@@ -64,6 +70,8 @@ async function getState(env: Env): Promise<BotState> {
   const state = JSON.parse(raw) as BotState;
   if (state.dailyLossDate !== todayStr()) {
     state.dailyLoss = 0;
+    state.dailyWins = 0;
+    state.dailyWinPnl = 0;
     state.dailyLossDate = todayStr();
   }
   return state;
@@ -252,6 +260,14 @@ async function handleHeartbeat(req: Request, env: Env): Promise<Response> {
   if (!checkAuth(req, env)) return new Response('unauthorized', { status: 401 });
   const state = await getState(env);
   state.lastHeartbeat = Date.now();
+  try {
+    const body = await req.json() as { balance?: number };
+    if (typeof body.balance === 'number' && !isNaN(body.balance)) {
+      state.balance = body.balance;
+    }
+  } catch {
+    // no body or invalid json -- fine, heartbeat still counts
+  }
   await setState(env, state);
   await env.STATE_KV.delete('watchdog_alerted');
   return new Response('ok');
@@ -309,6 +325,9 @@ async function handleLogTrade(req: Request, env: Env): Promise<Response> {
 
   if (body.result === 'LOSS') {
     state.dailyLoss += Math.abs(body.pnl);
+  } else if (body.result === 'WIN') {
+    state.dailyWins += 1;
+    state.dailyWinPnl += body.pnl;
   }
   await setState(env, state);
 
