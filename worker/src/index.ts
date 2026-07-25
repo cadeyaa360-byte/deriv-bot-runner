@@ -1,25 +1,29 @@
 ﻿// ============================================================================
-// DERIV BOT â€” CONTROL LAYER (Cloudflare Worker)
+// DERIV BOT — CONTROL LAYER (Cloudflare Worker)
 //
 // Responsibilities:
 //   1. Telegram bot - remote control (pause/resume, mode switch, status, report)
 //   2. Live state store (KV) - mode, paused flag, daily P&L, loss limit
 //   3. Safety rails - kill switch, daily loss circuit breaker, two-step real
-//      account switch, watchdog heartbeat check
+//      account switch (5-min expiry), watchdog heartbeat check
 //   4. Trade history (D1) - every trade GitHub Actions places gets logged here
+//   5. Candle-coverage tracking (KV) - lets liveRun.ts catch up on signals
+//      missed between cron runs, instead of only checking the latest candle
+//   6. Generic alert relay - lets liveRun.ts push ad hoc Telegram warnings
+//      (execution latency, symbol health) without needing its own bot token
 //
 // GitHub Actions calls this Worker before AND after every trading run:
-//   GET  /state        -> should I trade right now? (mode, paused, loss limit hit)
-//   POST /heartbeat     -> "I ran successfully at time T"
-//   POST /log-trade     -> "here's what happened this run"
-// All three require: Authorization: Bearer <API_SHARED_SECRET>
+//   GET  /state          -> should I trade right now? (mode, paused, loss limit hit)
+//   GET  /last-candles    -> map of symbol -> last processed candle epoch
+//   POST /last-candles    -> overwrite that map (single KV write per run)
+//   POST /alert           -> relay an ad hoc warning to Telegram
+//   POST /heartbeat       -> "I ran successfully at time T"
+//   POST /log-trade       -> "here's what happened this run"
+// All require: Authorization: Bearer <API_SHARED_SECRET>
 //
 // A Cloudflare Cron Trigger (defined in wrangler.toml) calls this Worker's
 // scheduled() handler every minute to check whether GitHub Actions has gone
 // silent (watchdog), independent of whether GitHub Actions itself is healthy.
-//
-// Matches the real schema.sql: trades table uses contract_id, entry_price,
-// exit_price, stake, payout, result (WIN/LOSS), pnl, mode, opened_at, closed_at.
 // ============================================================================
 
 export interface Env {
@@ -38,6 +42,7 @@ interface BotState {
   mode: Mode;
   paused: boolean;
   pendingRealConfirm: boolean;
+  pendingRealConfirmExpiry: number;
   dailyLossLimit: number;
   dailyLoss: number;
   dailyWins: number;
@@ -51,6 +56,7 @@ const DEFAULT_STATE: BotState = {
   mode: 'demo',
   paused: false,
   pendingRealConfirm: false,
+  pendingRealConfirmExpiry: 0,
   dailyLossLimit: 0,
   dailyLoss: 0,
   dailyWins: 0,
@@ -133,7 +139,7 @@ async function handleTelegramUpdate(update: any, env: Env): Promise<void> {
       '/status - current state\n' +
       '/stop - pause trading (kill switch)\n' +
       '/resume - resume trading\n' +
-      '/switchreal - begin switch to real account (requires confirmation)\n' +
+      '/switchreal - begin switch to real account (requires confirmation, expires in 5 min)\n' +
       '/switchdemo - switch back to demo (instant, no confirmation)\n' +
       '/setlimit <amount> - set daily loss limit (0 disables)\n' +
       '/report - last 10 trades'
@@ -163,6 +169,7 @@ async function handleTelegramUpdate(update: any, env: Env): Promise<void> {
   if (text === '/switchdemo') {
     state.mode = 'demo';
     state.pendingRealConfirm = false;
+    state.pendingRealConfirmExpiry = 0;
     await setState(env, state);
     await sendTelegram(env, '[demo] Switched to demo mode.');
     return;
@@ -170,10 +177,11 @@ async function handleTelegramUpdate(update: any, env: Env): Promise<void> {
 
   if (text === '/switchreal') {
     state.pendingRealConfirm = true;
+    state.pendingRealConfirmExpiry = Date.now() + 5 * 60 * 1000;
     await setState(env, state);
     await sendTelegram(env,
       'WARNING: this will switch to REAL money trading.\n\n' +
-      `To confirm, send:\n/confirm ${env.CONFIRM_PHRASE}\n\n` +
+      `To confirm within 5 minutes, send:\n/confirm ${env.CONFIRM_PHRASE}\n\n` +
       'Send anything else to cancel.'
     );
     return;
@@ -184,14 +192,23 @@ async function handleTelegramUpdate(update: any, env: Env): Promise<void> {
       await sendTelegram(env, 'No pending real-account switch. Use /switchreal first.');
       return;
     }
+    if (Date.now() > state.pendingRealConfirmExpiry) {
+      state.pendingRealConfirm = false;
+      state.pendingRealConfirmExpiry = 0;
+      await setState(env, state);
+      await sendTelegram(env, 'Confirmation window expired (5 min). Use /switchreal again if you still want to switch to real.');
+      return;
+    }
     const phrase = text.replace('/confirm', '').trim();
     if (phrase === env.CONFIRM_PHRASE) {
       state.mode = 'real';
       state.pendingRealConfirm = false;
+      state.pendingRealConfirmExpiry = 0;
       await setState(env, state);
       await sendTelegram(env, '[REAL] Switched to REAL account. Trading live money now.');
     } else {
       state.pendingRealConfirm = false;
+      state.pendingRealConfirmExpiry = 0;
       await setState(env, state);
       await sendTelegram(env, 'Confirmation phrase did not match. Real-account switch cancelled.');
     }
@@ -254,6 +271,37 @@ async function handleGetState(req: Request, env: Env): Promise<Response> {
     dailyLoss: state.dailyLoss,
     dailyLossLimit: state.dailyLossLimit,
   });
+}
+
+async function handleGetLastCandles(req: Request, env: Env): Promise<Response> {
+  if (!checkAuth(req, env)) return new Response('unauthorized', { status: 401 });
+  const raw = await env.STATE_KV.get('last_candles');
+  return new Response(raw ?? '{}', { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function handleSetLastCandles(req: Request, env: Env): Promise<Response> {
+  if (!checkAuth(req, env)) return new Response('unauthorized', { status: 401 });
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response('invalid json body', { status: 400 });
+  }
+  await env.STATE_KV.put('last_candles', JSON.stringify(body));
+  return new Response('ok');
+}
+
+async function handleAlert(req: Request, env: Env): Promise<Response> {
+  if (!checkAuth(req, env)) return new Response('unauthorized', { status: 401 });
+  let body: { text?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return new Response('invalid json body', { status: 400 });
+  }
+  if (!body.text) return new Response('missing text field', { status: 400 });
+  await sendTelegram(env, `[ALERT] ${body.text}`);
+  return new Response('ok');
 }
 
 async function handleHeartbeat(req: Request, env: Env): Promise<Response> {
@@ -331,7 +379,6 @@ async function handleLogTrade(req: Request, env: Env): Promise<Response> {
   }
   await setState(env, state);
 
-  // Per-trade Telegram notification -- fires identically in demo and real mode
   const modeTag = state.mode === 'real' ? '[REAL]' : '[demo]';
   const resultTag = body.result === 'WIN' ? 'WIN' : 'LOSS';
   await sendTelegram(env,
@@ -394,6 +441,18 @@ export default {
 
     if (url.pathname === '/state' && req.method === 'GET') {
       return handleGetState(req, env);
+    }
+
+    if (url.pathname === '/last-candles' && req.method === 'GET') {
+      return handleGetLastCandles(req, env);
+    }
+
+    if (url.pathname === '/last-candles' && req.method === 'POST') {
+      return handleSetLastCandles(req, env);
+    }
+
+    if (url.pathname === '/alert' && req.method === 'POST') {
+      return handleAlert(req, env);
     }
 
     if (url.pathname === '/heartbeat' && req.method === 'POST') {

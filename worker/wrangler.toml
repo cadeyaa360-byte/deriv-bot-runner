@@ -21,10 +21,8 @@ binding = "DB"
 database_name = "deriv-bot-db"
 database_id = "94148b0d-f87e-4e22-907d-cd31ab49d01b"
 
-# Secrets â€” do NOT put real values here. Set them with:
+# Secrets -- do NOT put real values here. Set them with:
 #   wrangler secret put TELEGRAM_BOT_TOKEN
 #   wrangler secret put TELEGRAM_CHAT_ID
 #   wrangler secret put CONFIRM_PHRASE
 #   wrangler secret put API_SHARED_SECRET
-
-

@@ -11,11 +11,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm install
       - run: npx tsx liveRun.ts
         env:
           DERIV_TOKEN: ${{ secrets.DERIV_TOKEN }}
           WORKER_URL: ${{ secrets.WORKER_URL }}
           API_SHARED_SECRET: ${{ secrets.API_SHARED_SECRET }}
-
-
+          # ALLOW_REAL_TRADING intentionally NOT set here.
+          # Real trading stays blocked until you deliberately add this
+          # secret in GitHub repo settings, set to exactly: CONFIRMED
