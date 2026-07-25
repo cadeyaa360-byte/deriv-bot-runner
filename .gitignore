@@ -2,3 +2,7 @@ node_modules/
 worker/node_modules/
 .env
 *.csv
+node_modules/
+worker/node_modules/
+cache/
+*.log
