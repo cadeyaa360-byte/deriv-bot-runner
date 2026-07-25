@@ -366,11 +366,17 @@ async function main() {
     }
   }
 
-  const finalBalanceSock = new DerivSocket(url);
-  await finalBalanceSock.waitReady();
-  const balance = await fetchBalance(finalBalanceSock);
-  finalBalanceSock.close();
-  if (balance !== undefined) console.log(`Current balance: ${balance.toFixed(2)}`);
+  let balance: number | undefined;
+  try {
+    const freshUrl = await getOtpWsUrl(account.account_id, DERIV_TOKEN!);
+    const finalBalanceSock = new DerivSocket(freshUrl);
+    await finalBalanceSock.waitReady();
+    balance = await fetchBalance(finalBalanceSock);
+    finalBalanceSock.close();
+    if (balance !== undefined) console.log(`Current balance: ${balance.toFixed(2)}`);
+  } catch (err) {
+    console.warn(`[final balance check failed] ${(err as Error).message}`);
+  }
 
   await sendHeartbeat(balance);
   console.log(`[${new Date().toISOString()}] liveRun complete. ${settledTrades.length} trade(s) settled and logged.`);
