@@ -12,7 +12,11 @@ jobs:
         with:
           node-version: '24'
       - run: npm install
-      - run: npx tsx liveRun.ts
+      - name: Run trading bot
+        shell: bash
+        run: |
+          set -o pipefail
+          npx tsx liveRun.ts 2>&1 | tee run_output.log
         env:
           DERIV_TOKEN: ${{ secrets.DERIV_TOKEN }}
           WORKER_URL: ${{ secrets.WORKER_URL }}
@@ -20,3 +24,9 @@ jobs:
           # ALLOW_REAL_TRADING intentionally NOT set here.
           # Real trading stays blocked until you deliberately add this
           # secret in GitHub repo settings, set to exactly: CONFIRMED
+      - name: Notify Telegram
+        if: always()
+        run: npx tsx notifyTelegram.ts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
