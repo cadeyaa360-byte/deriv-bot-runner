@@ -1,20 +1,28 @@
 ﻿// ============================================================================
-// STAGE 5: BREADTH DECORRELATION CONTROL TEST
+// BREADTH CONTROL TEST — circular time-shift permutation
 //
-// For each group, computes TWO cross-tabs side by side:
-//   REAL breadth  - exactly as before, using the symbol's own group.
-//   FAKE breadth  - using a randomly shuffled symbol->group mapping (fixed
-//                   seed, reproducible), so "breadth" is computed against
-//                   symbols that have no real reason to be correlated with
-//                   the signal's own symbol.
+// The Stage 3 cross-tab showed breadth's win-rate lift holding up within
+// every ADX bucket — good evidence it's real, independent information.
+// But unlike the core CMO+WilliamsR signal (which passed a random-trigger
+// control test), breadth itself has never been isolated from a subtler
+// possibility: that periods with many symbols signaling at once are simply
+// easier-to-predict market regimes for everyone (e.g. calm/orderly trending
+// stretches), which would make "breadth" a proxy for regime, not genuine
+// cross-market confirmation.
 //
-// If FAKE breadth shows a similar win-rate ramp to REAL breadth, that means
-// breadth is picking up something like "easy market conditions for everyone
-// right now" rather than genuine cross-market confirmation -- since a random
-// pairing has no business "confirming" anything.
+// METHOD: for each trial, every symbol's own signal timestamps are rotated
+// by a random offset, circularly, within that symbol's own time range. This
+// keeps each symbol's signal COUNT, direction mix, and internal clustering
+// completely intact — only the ALIGNMENT between symbols is destroyed.
+// "Fake breadth" is then computed the same way as real breadth, but against
+// these shifted times.
 //
-// If FAKE breadth stays flat while REAL breadth ramps, that's real evidence
-// breadth is genuine independent information.
+// If fake breadth ALSO shows a win-rate ramp similar to real breadth, the
+// effect isn't genuine confluence — distrust the breadth-based Kelly sizing
+// already live in production. If fake breadth stays flat near the baseline
+// STRONG win rate, real breadth is validated.
+//
+// Requires the cache/*_stage1.json files from the 39-symbol fetch.
 // ============================================================================
 
 import { readFileSync, existsSync } from 'fs';
@@ -22,17 +30,18 @@ import { readFileSync, existsSync } from 'fs';
 const EXPIRY_MIN = 3;
 const AGREEMENT_WINDOW = 3;
 const PAYOUT_RATE = 0.85;
+const BREAKEVEN = (1 / (1 + PAYOUT_RATE)) * 100;
 const ADX_THRESHOLD = 25;
 const BREADTH_WINDOW_MIN = 2;
-const RANDOM_SEED = 42; // fixed seed so this is reproducible
+const SHUFFLE_TRIALS = 8;
 
 interface Candle { time: number; open: number; high: number; low: number; close: number; }
 type Direction = 'BUY' | 'SELL';
 interface Trigger { index: number; dir: Direction; }
-interface Signal { index: number; dir: Direction; time: number; adx: number }
+interface Signal { index: number; dir: Direction; time: number; adx: number; }
 
 // ---------------------------------------------------------------------------
-// EXACT proven logic - unchanged.
+// EXACT proven logic — unchanged
 // ---------------------------------------------------------------------------
 function cmoTriggers(candles: Candle[]): Trigger[] {
   const period = 9;
@@ -139,7 +148,7 @@ const GROUPS: Record<string, string[]> = {
 
 function loadCandles(symbol: string): Candle[] | null {
   const path = `cache/${symbol}_stage1.json`;
-  if (!existsSync(path)) { console.warn(`Missing cache for ${symbol}, skipping.`); return null; }
+  if (!existsSync(path)) return null;
   return JSON.parse(readFileSync(path, 'utf-8'));
 }
 
@@ -159,116 +168,125 @@ function outcomeOf(sig: Signal, candles: Candle[]): Direction | 'NONE' {
   return exit > entry ? 'BUY' : exit < entry ? 'SELL' : 'NONE';
 }
 
-function breadthOf(sym: string, sig: Signal, pairSymbols: string[], data: Map<string, { candles: Candle[]; signals: Signal[] }>): number {
+function breadthOf(sym: string, sigTime: number, dir: Direction, symbols: string[], data: Map<string, { signals: Signal[] }>): number {
   let breadth = 0;
-  for (const other of pairSymbols) {
+  for (const other of symbols) {
     if (other === sym) continue;
     const otherEntry = data.get(other);
     if (!otherEntry) continue;
-    const match = otherEntry.signals.some(s => s.dir === sig.dir && Math.abs(s.time - sig.time) <= BREADTH_WINDOW_MIN * 60);
+    const match = otherEntry.signals.some(s => s.dir === dir && Math.abs(s.time - sigTime) <= BREADTH_WINDOW_MIN * 60);
     if (match) breadth++;
   }
   return breadth;
 }
 
-function adxBucketOf(adx: number): string {
-  if (adx < 25) return '<25 (STANDARD)';
-  if (adx < 35) return '25-35';
-  if (adx < 45) return '35-45';
-  return '45+';
-}
-
-// simple seeded PRNG (mulberry32) so the shuffle is reproducible
-function mulberry32(seed: number) {
-  return function () {
-    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function shuffle<T>(arr: T[], rng: () => number): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
-function crossTab(label: string, symbols: string[], pairSymbolsFor: (sym: string) => string[], data: Map<string, { candles: Candle[]; signals: Signal[] }>) {
-  console.log(`\n--- ${label} ---`);
-  const cells = new Map<string, { correct: number; total: number }>();
-
-  for (const sym of symbols) {
-    const entry = data.get(sym);
-    if (!entry) continue;
-    const { candles, signals } = entry;
-    const pairSymbols = pairSymbolsFor(sym);
-    for (const sig of signals) {
-      const actual = outcomeOf(sig, candles);
-      if (actual === 'NONE') continue;
-      const breadth = Math.min(breadthOf(sym, sig, pairSymbols, data), 3);
-      const adxB = adxBucketOf(sig.adx);
-      const breadthLabel = breadth === 3 ? '3+' : String(breadth);
-      const key = `${adxB}|${breadthLabel}`;
-      if (!cells.has(key)) cells.set(key, { correct: 0, total: 0 });
-      const c = cells.get(key)!;
-      c.total++;
-      if (actual === sig.dir) c.correct++;
-    }
-  }
-
-  const adxOrder = ['<25 (STANDARD)', '25-35', '35-45', '45+'];
-  const breadthOrder = ['0', '1', '2', '3+'];
-  console.log('ADX bucket      | Breadth 0        | Breadth 1        | Breadth 2        | Breadth 3+');
-  for (const adxB of adxOrder) {
-    let row = adxB.padEnd(16) + ' | ';
-    for (const bB of breadthOrder) {
-      const c = cells.get(`${adxB}|${bB}`);
-      if (!c || c.total < 10) { row += '(n<10)'.padEnd(18); continue; }
-      const wr = (c.correct / c.total) * 100;
-      row += `${wr.toFixed(1)}% (n=${c.total})`.padEnd(18);
-    }
-    console.log(row);
-  }
+// Circularly shift a symbol's own signal times within its own candle time range.
+function shiftSignals(signals: Signal[], minTime: number, range: number, offsetSeconds: number): Signal[] {
+  if (range <= 0) return signals;
+  return signals.map(s => ({
+    ...s,
+    time: minTime + (((s.time - minTime + offsetSeconds) % range) + range) % range,
+  }));
 }
 
 function main() {
-  const allSymbols = Object.values(GROUPS).flat();
-  const data = new Map<string, { candles: Candle[]; signals: Signal[] }>();
+  console.log(`Breakeven: ${BREAKEVEN.toFixed(2)}%. Running ${SHUFFLE_TRIALS} shuffle trials per group.\n`);
 
-  for (const sym of allSymbols) {
-    const candles = loadCandles(sym);
-    if (!candles || candles.length < 100) continue;
-    const signals = computeSignals(candles);
-    data.set(sym, { candles, signals });
-  }
-
-  const rng = mulberry32(RANDOM_SEED);
-  // build a fixed random pairing: each symbol gets assigned a DIFFERENT
-  // random subset of the SAME SIZE as its real group, drawn from all symbols
-  // (excluding itself), so breadth denominators are comparable.
-  const fakePairings = new Map<string, string[]>();
   for (const [groupName, symbols] of Object.entries(GROUPS)) {
     if (symbols.length < 2) continue;
+
+    const data = new Map<string, { candles: Candle[]; signals: Signal[]; minTime: number; range: number }>();
     for (const sym of symbols) {
-      const pool = allSymbols.filter(s => s !== sym);
-      const shuffled = shuffle(pool, rng);
-      fakePairings.set(sym, shuffled.slice(0, symbols.length - 1));
+      const candles = loadCandles(sym);
+      if (!candles || candles.length < 100) continue;
+      const signals = computeSignals(candles);
+      const minTime = candles[0].time, maxTime = candles[candles.length - 1].time;
+      data.set(sym, { candles, signals, minTime, range: maxTime - minTime });
     }
-  }
+    if (data.size < 2) { console.log(`Skipping ${groupName} — not enough cached symbols.\n`); continue; }
 
-  for (const [groupName, symbols] of Object.entries(GROUPS)) {
-    if (symbols.length < 2) continue;
-    console.log(`\n=== ${groupName} ===`);
-    crossTab('REAL breadth (own group)', symbols, (sym) => symbols, data);
-    crossTab('FAKE breadth (random pairing, same seed)', symbols, (sym) => fakePairings.get(sym) ?? [], data);
-  }
+    // --- REAL breadth win-rate by bucket (STRONG tier only) ---
+    const realBuckets = new Map<number, { correct: number; total: number }>();
+    for (const [sym, entry] of data) {
+      const simpleData = new Map([...data].map(([k, v]) => [k, { signals: v.signals }]));
+      for (const sig of entry.signals) {
+        if (sig.adx < ADX_THRESHOLD) continue;
+        const actual = outcomeOf(sig, entry.candles);
+        if (actual === 'NONE') continue;
+        const breadth = Math.min(breadthOf(sym, sig.time, sig.dir, symbols, simpleData), 4);
+        if (!realBuckets.has(breadth)) realBuckets.set(breadth, { correct: 0, total: 0 });
+        const b = realBuckets.get(breadth)!;
+        b.total++;
+        if (actual === sig.dir) b.correct++;
+      }
+    }
 
-  console.log('\nIf FAKE breadth shows a similar win-rate ramp to REAL breadth in the 3+ column, breadth is likely detecting general favorable conditions, not genuine cross-market confirmation.');
-  console.log('If FAKE breadth stays flat/random while REAL breadth ramps clearly, that supports breadth being real independent information.');
+    // --- FAKE (shuffled) breadth win-rate by bucket, averaged over trials ---
+    const fakeBucketTrials = new Map<number, number[]>();
+    for (let trial = 0; trial < SHUFFLE_TRIALS; trial++) {
+      const shiftedData = new Map<string, { signals: Signal[] }>();
+      for (const [sym, entry] of data) {
+        const offset = Math.floor(Math.random() * Math.max(entry.range, 1));
+        shiftedData.set(sym, { signals: shiftSignals(entry.signals, entry.minTime, entry.range, offset) });
+      }
+
+      const trialBuckets = new Map<number, { correct: number; total: number }>();
+      for (const [sym, entry] of data) {
+        for (const sig of entry.signals) {
+          if (sig.adx < ADX_THRESHOLD) continue;
+          const actual = outcomeOf(sig, entry.candles);
+          if (actual === 'NONE') continue;
+          const fakeBreadth = Math.min(breadthOf(sym, sig.time, sig.dir, symbols, shiftedData), 4);
+          if (!trialBuckets.has(fakeBreadth)) trialBuckets.set(fakeBreadth, { correct: 0, total: 0 });
+          const b = trialBuckets.get(fakeBreadth)!;
+          b.total++;
+          if (actual === sig.dir) b.correct++;
+        }
+      }
+      for (const [breadth, b] of trialBuckets) {
+        if (b.total < 10) continue;
+        const wr = (b.correct / b.total) * 100;
+        if (!fakeBucketTrials.has(breadth)) fakeBucketTrials.set(breadth, []);
+        fakeBucketTrials.get(breadth)!.push(wr);
+      }
+    }
+
+    console.log(`=== BREADTH CONTROL TEST — ${groupName} (STRONG, ADX>=25 only) ===`);
+    console.log('Breadth | REAL WinRate (n)      | FAKE WinRate avg±std (shuffled)');
+    const allBreadths = new Set([...realBuckets.keys(), ...fakeBucketTrials.keys()]);
+    for (const breadth of [...allBreadths].sort((a, b) => a - b)) {
+      const real = realBuckets.get(breadth);
+      const realStr = real && real.total >= 10 ? `${(real.correct / real.total * 100).toFixed(1)}% (n=${real.total})` : '(n<10)';
+      const fakeRates = fakeBucketTrials.get(breadth) || [];
+      let fakeStr = '(n<10)';
+      if (fakeRates.length > 0) {
+        const mean = fakeRates.reduce((a, b) => a + b, 0) / fakeRates.length;
+        const variance = fakeRates.reduce((a, b) => a + (b - mean) ** 2, 0) / fakeRates.length;
+        fakeStr = `${mean.toFixed(1)}%±${Math.sqrt(variance).toFixed(1)}`;
+      }
+      const label = breadth === 4 ? '4+' : String(breadth);
+      console.log(`${label.padEnd(7)} | ${realStr.padEnd(22)} | ${fakeStr}`);
+    }
+
+    const realBreadth0 = realBuckets.get(0);
+    const realBreadthTop = [...realBuckets.entries()].filter(([, b]) => b.total >= 10).sort((a, b) => b[0] - a[0])[0];
+    const fakeBreadth0 = fakeBucketTrials.get(0);
+    const fakeBreadthTop = [...fakeBucketTrials.entries()].sort((a, b) => b[0] - a[0])[0];
+
+    if (realBreadth0 && realBreadthTop && fakeBreadth0 && fakeBreadthTop) {
+      const realRamp = (realBreadthTop[1].correct / realBreadthTop[1].total * 100) - (realBreadth0.correct / realBreadth0.total * 100);
+      const fakeMean0 = fakeBreadth0.reduce((a, b) => a + b, 0) / fakeBreadth0.length;
+      const fakeMeanTop = fakeBreadthTop[1].reduce((a, b) => a + b, 0) / fakeBreadthTop[1].length;
+      const fakeRamp = fakeMeanTop - fakeMean0;
+      console.log(`\nReal ramp (breadth 0 -> top): +${realRamp.toFixed(1)} points. Fake/shuffled ramp: ${fakeRamp >= 0 ? '+' : ''}${fakeRamp.toFixed(1)} points.`);
+      if (Math.abs(fakeRamp) > realRamp * 0.4) {
+        console.log('>>> Fake breadth shows a meaningful ramp too — breadth may be partly a regime proxy, not pure cross-market confluence. Treat live breadth-based sizing with caution.');
+      } else {
+        console.log('>>> Fake breadth\'s ramp is small relative to the real one — real breadth looks like genuine independent information.');
+      }
+    }
+    console.log('');
+  }
 }
 
 main();
