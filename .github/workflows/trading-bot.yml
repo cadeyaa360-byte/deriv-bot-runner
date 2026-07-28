@@ -1,7 +1,5 @@
 ﻿name: deriv-trading-bot
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch: {}
 jobs:
   run:
@@ -30,3 +28,4 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
